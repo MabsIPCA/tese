@@ -1,0 +1,16 @@
+.vscode
+results.json
+**/.DS_Store
+.DS_Store
+compose/data/db-scoreboard-service
+
+# Terraform 
+.terraform
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+
+# Node.js
+node_modules
+
+.env

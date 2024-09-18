@@ -1,0 +1,152 @@
+version: "3"
+services:
+  #####################################################################
+  # Keycloak
+  db-keycloak-service:
+    image: postgres:15.3-alpine
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    volumes:
+      - ./data/db-keycloak-service:/var/lib/postgresql/data
+    env_file:
+      - ./envs/.env.keycloak
+    ports:
+      - 5432:5432
+    networks:
+      - mad-network
+
+  keycloak-service:
+    image: ghcr.io/helm-project/keycloak:main
+    container_name: mad-keycloak-service
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    command: start-dev
+    env_file:
+      - ./envs/.env.keycloak
+    ports:
+      - 8080:8080
+    depends_on:
+      - db-keycloak-service
+    networks:
+      traefik-public:
+      mad-network:
+        aliases:
+          - keycloak.mad.localhost
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.keycloak-service.rule=Host(`keycloak.mad.localhost`) && PathPrefix(`/`) && (Method(`GET`) || Method(`POST`))
+      - traefik.http.routers.keycloak-service.entrypoints=web
+      - traefik.http.services.keycloak-service.loadbalancer.server.port=8080
+
+  #####################################################################
+  # Traefik
+  traefik-reverse-proxy:
+    image: traefik:2.10.3
+    container_name: mad-traefik-service
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    # Enables the web UI and tells Traefik to listen to docker
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8082:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik-service.rule=Host(`traefik.mad.localhost`)
+      - traefik.http.routers.traefik-service.entrypoints=web
+      - traefik.http.services.traefik-service.loadbalancer.server.port=8080
+
+  #####################################################################
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: mad-rabbitmq-service
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
+      - ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+    networks:
+      - mad-network
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.rabbitmq-service.rule=Host(`rabbitmq.mad.localhost`)
+      - traefik.http.routers.rabbitmq-service.entrypoints=web
+      - traefik.http.services.rabbitmq-service.loadbalancer.server.port=15672
+
+  #####################################################################
+  # Minio
+  minio:
+    image: minio/minio:RELEASE.2023-02-27T18-10-45Z.hotfix.6ba7e7dbf
+    command: server /data --console-address ":9001"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    env_file:
+      - ./envs/.env.minio
+    environment:
+      - MINIO_BROWSER_REDIRECT_URL=http://s3-console.mad.localhost
+
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - ./data/minio-data:/data
+    networks:
+      - mad-network
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.minio.service=minio
+      - traefik.http.routers.minio.rule=Host(`s3.mad.localhost`)
+      - traefik.http.services.minio.loadbalancer.server.port=9000
+      - traefik.http.routers.minio-console.service=minio-console
+      - traefik.http.routers.minio-console.rule=Host(`s3-console.mad.localhost`)
+      - traefik.http.services.minio-console.loadbalancer.server.port=9001

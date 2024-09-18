@@ -1,0 +1,12 @@
+version: "3"
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}
+
+networks:
+  mad-network:
+    name: mad-network
+    driver: bridge
+  traefik-public:
+    name: traefik-public

@@ -1,0 +1,242 @@
+version: "3"
+services:
+  #####################################################################
+  # Web App
+  webapp:
+    image: ghcr.io/mad-goat-project/mad-web-app:main
+    container_name: mad-web-app
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    env_file:
+      - ./envs/.env.webapp
+    ports:
+      - 3000:80
+    networks:
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.webapp.rule=Host(`app.mad.localhost`)
+      - traefik.http.routers.webapp.entrypoints=web
+      - traefik.http.services.webapp.loadbalancer.server.port=80
+    #####################################################################
+    # Lesson Service
+
+  db-lesson-service:
+    image: postgres:14.1-alpine
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    restart: always
+    env_file:
+      - ./envs/.env.lesson
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./data/db-lesson-service:/var/lib/postgresql/data
+    networks:
+      - mad-network
+
+  lesson-service:
+    image: ghcr.io/mad-goat-project/mad-lessons-service:main
+    container_name: mad-lesson-service
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    ports:
+      - "3001:3000"
+    env_file:
+      - ./envs/.env.lesson
+      - ./envs/.env.keycloak.secrets
+    depends_on:
+      - db-lesson-service
+    networks:
+      - mad-network
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.lesson-service.rule=Host(`api.mad.localhost`) && PathPrefix(`/lessons`)
+      - traefik.http.middlewares.strip-prefix-lessons.stripprefix.prefixes=/lessons
+      - traefik.http.routers.lesson-service.middlewares=strip-prefix-lessons@docker
+      - traefik.http.routers.lesson-service.entrypoints=web
+      - traefik.http.services.lesson-service.loadbalancer.server.port=3000
+
+  #####################################################################
+  # Category: Open Source Software
+  # Lesson: Inconsistent Security Standards
+
+  #Safe Service
+  mad4shell-service-safe:
+    image: ghcr.io/mad-goat-project/mad-goat4shell-service:safe
+    container_name: mad4shell-service-safe
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    ports:
+      - "3002:8080"
+    networks:
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mad4shell-service-safe.rule=Host(`api.mad.localhost`) && PathPrefix(`/goat4shell-safe`)
+      - traefik.http.middlewares.strip-prefix-safe.stripprefix.prefixes=/goat4shell-safe
+      - traefik.http.routers.mad4shell-service-safe.middlewares=strip-prefix-safe@docker
+      - traefik.http.routers.mad4shell-service-safe.entrypoints=web
+      - traefik.http.services.mad4shell-service-safe.loadbalancer.server.port=8080
+
+  #Unsafe Service
+  mad4shell-service-unsafe:
+    image: ghcr.io/mad-goat-project/mad-goat4shell-service:unsafe
+    container_name: mad4shell-service-unsafe
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    ports:
+      - "3003:8080"
+    networks:
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mad4shell-service-unsafe.rule=Host(`api.mad.localhost`) && PathPrefix(`/goat4shell-unsafe`)
+      - traefik.http.middlewares.strip-prefix-unsafe.stripprefix.prefixes=/goat4shell-unsafe
+      - traefik.http.routers.mad4shell-service-unsafe.middlewares=strip-prefix-unsafe@docker
+      - traefik.http.routers.mad4shell-service-unsafe.entrypoints=web
+      - traefik.http.services.mad4shell-service-unsafe.loadbalancer.server.port=8080
+
+  #####################################################################
+  # Category: Open Source Software
+  # Lesson: Unknown Source Code Origins
+
+  db-scoreboard-service:
+    container_name: db-scoreboard-service
+    image: mongo:6.0
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    ports:
+      - 27017:27017
+    volumes:
+      - ./data/db-scoreboard-service:/data/db
+    env_file:
+      - ./envs/.env.scoreboard
+    networks:
+      - mad-network
+
+  scoreboard-service:
+    image: ghcr.io/mad-goat-project/mad-scoreboard-service:main
+    container_name: mad-scoreboard-service
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    restart: always
+    env_file:
+      - ./envs/.env.scoreboard
+      - ./envs/.env.keycloak.secrets
+    ports:
+      - "3004:3000"
+    depends_on:
+      - db-scoreboard-service
+    networks:
+      - mad-network
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.scoreboard-service.rule=Host(`api.mad.localhost`) && PathPrefix(`/scoreboard`)
+      - traefik.http.middlewares.strip-prefix-scoreboard.stripprefix.prefixes=/scoreboard
+      - traefik.http.routers.scoreboard-service.middlewares=strip-prefix-scoreboard@docker
+      - traefik.http.routers.scoreboard-service.entrypoints=web
+      - traefik.http.services.scoreboard-service.loadbalancer.server.port=3000
+
+  #######################################################################
+  #### Jekyll Documentation Service
+
+  docs-service:
+    image: ghcr.io/mad-goat-project/mad-goat-docs:main
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    restart: always
+    ports:
+      - "4000:80"
+    networks:
+      - mad-network # No need for internal communication
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.docs-service.rule=Host(`docs.mad.localhost`)
+      - traefik.http.routers.docs-service.entrypoints=web
+      - traefik.http.services.docs-service.loadbalancer.server.port=80
+
+    #####################################################################
+    # Profile Service
+  profile-service:
+    image: ghcr.io/mad-goat-project/mad-profile-service:main
+    container_name: mad-profile-service
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    env_file:
+      - ./envs/.env.profile
+      - ./envs/.env.keycloak.secrets
+    ports:
+      - "3015:3000"
+    networks:
+      - mad-network
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.profile-service.rule=Host(`api.mad.localhost`) && PathPrefix(`/profile`)
+      - traefik.http.middlewares.strip-prefix-profile.stripprefix.prefixes=/profile
+      - traefik.http.routers.profile-service.middlewares=strip-prefix-profile@docker
+      - traefik.http.routers.profile-service.entrypoints=web
+      - traefik.http.services.profile-service.loadbalancer.server.port=3000
